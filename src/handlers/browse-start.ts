@@ -1,17 +1,19 @@
 import { Composer } from "grammy";
-
-// SCAFFOLD — generated from the bot blueprint BEFORE the agent runs.
-// Keep a LIVE registration (.command / .callbackQuery / …) so this feature is
-// never an empty stub. Replace the reply body with real logic + copy; if you
-// change the user-facing text, update tests/specs to match EXACTLY.
-// Do NOT rewrite src/bot.ts — buildBot() already auto-loads this module.
-// Menu: wire this into /start via registerMainMenuItem({ label: "Browse объявления", data: "browse:start" }) if the toolkit exposes it.
-
-const composer = new Composer();
-
-composer.callbackQuery("browse:start", async (ctx) => {
-  await ctx.answerCallbackQuery();
-  await ctx.reply("Open browsing UI with filters for category and neighbourhood and pagination");
-});
-
+import type { Ctx } from "../bot.js";
+import { inlineButton, inlineKeyboard, paginate, registerMainMenuItem, urlButton, type InlineButton } from "../toolkit/index.js";
+import { CATEGORIES, LOCATIONS, loadDomain, changeDomain, type Listing } from "../domain.js";
+registerMainMenuItem({ label: "🔎 Найти объявление", data: "browse:start", order: 20 });
+const composer = new Composer<Ctx>();
+async function show(ctx: Ctx, page = 0, category?: string, location?: string) { const d = await loadDomain(ctx); const all = d.listings.filter((x) => x.status === "published" && (!category || x.category === category) && (!location || location === "Вся Москва" || x.location === location)); const p = paginate(all, { page, perPage: 5, callbackPrefix: "browse:page", prevLabel: "Назад", nextLabel: "Ещё" }); const buttons: InlineButton[][] = p.pageItems.map((x) => [inlineButton(`${x.title.slice(0, 35)} · ${x.location}`, `listing:open:${x.id}`)]); const controls = p.controls.inline_keyboard; buttons.push([inlineButton("Категория", "browse:categories"), inlineButton("Район", "browse:locations")]); buttons.push(...controls); buttons.push([inlineButton("⬅️ В меню", "menu:main")]); await ctx.reply(all.length ? "Свежие объявления:" : "Пока нет подходящих объявлений — загляните позже.", { reply_markup: inlineKeyboard(buttons) }); }
+composer.callbackQuery("browse:start", async (ctx) => { await ctx.answerCallbackQuery(); await show(ctx); });
+composer.callbackQuery("browse:categories", async (ctx) => { await ctx.answerCallbackQuery(); await ctx.reply("Выберите категорию.", { reply_markup: inlineKeyboard(CATEGORIES.map((x, i) => [inlineButton(x, `browse:cat:${i}`)]).concat([[inlineButton("Все категории", "browse:all")], [inlineButton("⬅️ Назад", "browse:start")]])) }); });
+composer.callbackQuery("browse:locations", async (ctx) => { await ctx.answerCallbackQuery(); await ctx.reply("Выберите район.", { reply_markup: inlineKeyboard(LOCATIONS.map((x, i) => [inlineButton(x, `browse:loc:${i}`)]).concat([[inlineButton("⬅️ Назад", "browse:start")]])) }); });
+composer.callbackQuery(/^browse:cat:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); await show(ctx, 0, CATEGORIES[Number(ctx.match[1])]); });
+composer.callbackQuery("browse:all", async (ctx) => { await ctx.answerCallbackQuery(); await show(ctx); });
+composer.callbackQuery(/^browse:loc:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); await show(ctx, 0, undefined, LOCATIONS[Number(ctx.match[1])]); });
+composer.callbackQuery(/^browse:page:(prev|next):(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); await show(ctx, Number(ctx.match[2])); });
+composer.callbackQuery(/^listing:open:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const listing = (await loadDomain(ctx)).listings.find((x) => x.id === ctx.match[1]); if (!listing || listing.status !== "published") { await ctx.reply("Это объявление больше недоступно."); return; } const price = listing.price || "договорная"; const text = `${listing.title}\n\n${listing.description}\n\nЦена: ${price}\nМесто: ${listing.location}\nФото: ${listing.photos.length}`; const actions: InlineButton[][] = [[listing.contact === "telegram" ? urlButton("Связаться в Telegram", `tg://user?id=${listing.owner}`) : inlineButton("Связаться", `listing:contact:${listing.id}`), inlineButton("Сохранить", `listing:save:${listing.id}`)], [inlineButton("Пожаловаться", `listing:report:${listing.id}`), inlineButton("⬅️ Назад", "browse:start")]]; await ctx.reply(text, { reply_markup: inlineKeyboard(actions) }); });
+composer.callbackQuery(/^listing:contact:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const x = (await loadDomain(ctx)).listings.find((v) => v.id === ctx.match[1]); if (!x) { await ctx.reply("Объявление не найдено."); return; } if (x.contact === "phone" && x.phone) { await ctx.reply("Показать номер телефона?", { reply_markup: inlineKeyboard([[inlineButton("Показать номер", `listing:phone:${x.id}`)], [inlineButton("Отмена", `listing:open:${x.id}`)]]) }); } else await ctx.reply("Откройте профиль автора в Telegram, чтобы написать ему.", { reply_markup: inlineKeyboard([[urlButton("Открыть Telegram", `tg://user?id=${x.owner}`)]]) }); });
+composer.callbackQuery(/^listing:phone:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const x = (await loadDomain(ctx)).listings.find((v) => v.id === ctx.match[1]); if (!x?.phone) { await ctx.reply("Автор не оставил номер для связи."); return; } await ctx.reply(`Номер автора: ${x.phone}`); });
+composer.callbackQuery(/^listing:save:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = ctx.from?.id ?? 0; await changeDomain(ctx, (d) => { const i = d.saved.findIndex((s) => s.user === user && s.listing === ctx.match[1]); if (i >= 0) d.saved.splice(i, 1); else d.saved.push({ user, listing: ctx.match[1] }); }); await ctx.reply("Сохранение обновлено."); });
 export default composer;

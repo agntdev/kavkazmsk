@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Post объявление — you're in the right place. What would you like to do next?"
+              "text": "Начнём. Напишите короткий заголовок (до 120 символов)."
             }
           }
         ],

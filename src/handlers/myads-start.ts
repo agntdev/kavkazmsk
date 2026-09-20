@@ -1,17 +1,14 @@
 import { Composer } from "grammy";
-
-// SCAFFOLD — generated from the bot blueprint BEFORE the agent runs.
-// Keep a LIVE registration (.command / .callbackQuery / …) so this feature is
-// never an empty stub. Replace the reply body with real logic + copy; if you
-// change the user-facing text, update tests/specs to match EXACTLY.
-// Do NOT rewrite src/bot.ts — buildBot() already auto-loads this module.
-// Menu: wire this into /start via registerMainMenuItem({ label: "Мои объявления", data: "myads:start" }) if the toolkit exposes it.
-
-const composer = new Composer();
-
-composer.callbackQuery("myads:start", async (ctx) => {
-  await ctx.answerCallbackQuery();
-  await ctx.reply("Show user's active and archived listings with actions (edit/renew/delete/mark sold)");
-});
-
+import type { Ctx } from "../bot.js";
+import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+import { changeDomain, loadDomain, now } from "../domain.js";
+registerMainMenuItem({ label: "📋 Мои объявления", data: "myads:start", order: 30 });
+const composer = new Composer<Ctx>();
+async function list(ctx: Ctx) { const user = ctx.from?.id ?? 0; const ads = (await loadDomain(ctx)).listings.filter((x) => x.owner === user); if (!ads.length) { await ctx.reply("У вас пока нет объявлений — нажмите «Подать объявление», чтобы добавить первое.", { reply_markup: inlineKeyboard([[inlineButton("Подать объявление", "post:start")], [inlineButton("⬅️ В меню", "menu:main")]]) }); return; } const rows = ads.map((x) => [inlineButton(`${x.status === "published" ? "✅" : "⏳"} ${x.title.slice(0, 30)}`, `myads:open:${x.id}`)]); rows.push([inlineButton("⬅️ В меню", "menu:main")]); await ctx.reply("Ваши объявления:", { reply_markup: inlineKeyboard(rows) }); }
+composer.callbackQuery("myads:start", async (ctx) => { await ctx.answerCallbackQuery(); await list(ctx); });
+composer.callbackQuery(/^myads:open:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const x = (await loadDomain(ctx)).listings.find((v) => v.id === ctx.match[1] && v.owner === (ctx.from?.id ?? 0)); if (!x) { await ctx.reply("Объявление не найдено или уже удалено."); return; } await ctx.reply(`${x.title}\n\nСтатус: ${x.status === "published" ? "опубликовано" : x.status === "pending" ? "на проверке" : x.status === "sold" ? "продано" : "снято"}`, { reply_markup: inlineKeyboard([[inlineButton("Обновить", `myads:renew:${x.id}`), inlineButton("Продано", `myads:sold:${x.id}`)], [inlineButton("Удалить", `myads:delete:${x.id}`)], [inlineButton("⬅️ К списку", "myads:start")]]) }); });
+composer.callbackQuery(/^myads:renew:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); const user = ctx.from?.id ?? 0; await changeDomain(ctx, (d) => { const x = d.listings.find((v) => v.id === ctx.match[1] && v.owner === user); if (x && x.status !== "removed") { x.status = "published"; x.updatedAt = now(); x.createdAt = now(); d.history.push({ listingId: x.id, action: "renewed", by: user, at: now() }); } }); await ctx.reply("Объявление поднято в каталоге."); });
+async function mark(ctx: Ctx, action: "sold" | "delete") { const user = ctx.from?.id ?? 0; await changeDomain(ctx, (d) => { const x = d.listings.find((v) => v.id === (ctx.match as string[])[1] && v.owner === user); if (x && x.status !== "removed") { x.status = action === "sold" ? "sold" : "removed"; x.updatedAt = now(); d.history.push({ listingId: x.id, action: action === "sold" ? "marked_sold" : "removed", by: user, at: now() }); } }); await ctx.reply(action === "sold" ? "Объявление отмечено как проданное." : "Объявление удалено."); }
+composer.callbackQuery(/^myads:sold:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); await mark(ctx, "sold"); });
+composer.callbackQuery(/^myads:delete:(.+)$/, async (ctx) => { await ctx.answerCallbackQuery(); await mark(ctx, "delete"); });
 export default composer;

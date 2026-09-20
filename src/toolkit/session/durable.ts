@@ -144,6 +144,20 @@ export class ChatDO {
       }
     }
 
+    if (url.pathname === "/domain" && request.method === "GET") {
+      const key = url.searchParams.get("key");
+      if (!key) return new Response("missing key", { status: 400 });
+      const value = await this.state.storage.get<unknown>("domain:" + key);
+      if (value === undefined) return new Response(null, { status: 204 });
+      return Response.json(value);
+    }
+    if (url.pathname === "/domain" && request.method === "PUT") {
+      const body = (await request.json()) as { key?: string; value?: unknown };
+      if (!body.key) return new Response("missing key", { status: 400 });
+      await this.state.storage.put("domain:" + body.key, body.value);
+      return new Response(null, { status: 204 });
+    }
+
     // Schedule a reminder + (re)arm the alarm to the earliest due one.
     if (url.pathname === "/remind" && request.method === "POST") {
       const rem = (await request.json()) as Reminder;
