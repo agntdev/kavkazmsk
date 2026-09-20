@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Show user's active and archived listings with actions (edit/renew/delete/mark sold)"
+              "text": "У вас пока нет объявлений — нажмите «Подать объявление», чтобы добавить первое."
             }
           }
         ],

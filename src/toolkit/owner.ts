@@ -31,7 +31,7 @@ export type OwnerAwareCtx = {
   env?: Record<string, unknown> | null;
   from?: { id: number } | undefined;
   chat?: { id: number } | undefined;
-  reply: (text: string, ...args: unknown[]) => unknown | Promise<unknown>;
+  reply: (...args: any[]) => unknown | Promise<unknown>;
   answerCallbackQuery?: (
     opts?: { text?: string; show_alert?: boolean },
   ) => unknown | Promise<unknown>;
@@ -69,11 +69,10 @@ function nodeProcessEnv(): Record<string, unknown> | undefined {
  * Platform-injected owner/admin chat id, or `undefined` if unset.
  * Prefer `ctx.env` (Workers); fall back to `process.env` only for Node/harness.
  */
-export function adminChatId(ctx: {
-  env?: Record<string, unknown> | null;
-}): string | undefined {
+export function adminChatId(ctx: { env?: Record<string, unknown> | null } | object): string | undefined {
+  const env = (ctx as { env?: Record<string, unknown> | null }).env;
   return (
-    readAdminFromEnv(ctx.env ?? undefined) ?? readAdminFromEnv(nodeProcessEnv())
+    readAdminFromEnv(env ?? undefined) ?? readAdminFromEnv(nodeProcessEnv())
   );
 }
 

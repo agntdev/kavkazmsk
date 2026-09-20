@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Open browsing UI with filters for category and neighbourhood and pagination"
+              "text": "Пока нет подходящих объявлений — загляните позже."
             }
           }
         ],
