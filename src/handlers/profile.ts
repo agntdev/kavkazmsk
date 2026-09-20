@@ -15,6 +15,31 @@ const composer = new Composer<Ctx>();
 const force = (placeholder: string) => ({ force_reply: true as const, input_field_placeholder: placeholder });
 const stars = (rating: number) => "★".repeat(rating) + "☆".repeat(5 - rating);
 
+function profileKeyboard(targetId: number, self: boolean, hasPhone: boolean, hasAvatar: boolean): InlineButton[][] {
+  const rows: InlineButton[][] = [[inlineButton("Оставить отзыв", `profile:review:start:${targetId}`)]];
+  if (self) {
+    rows.push([inlineButton("✏️ Настроить профиль", "profile:settings")]);
+    rows.push([inlineButton(hasPhone ? "Изменить телефон" : "Добавить телефон", "profile:phone:edit")]);
+    rows.push([inlineButton(hasAvatar ? "Изменить фото" : "Добавить фото", "profile:photo:start")]);
+    rows.push([inlineButton("Удалить профиль", "profile:delete")]);
+  } else {
+    rows.push([urlButton("Написать в Telegram", `tg://user?id=${targetId}`)]);
+    if (hasPhone) rows.push([inlineButton("Показать телефон", `profile:phone:${targetId}`)]);
+  }
+  rows.push([inlineButton("⬅️ В меню", "menu:main")]);
+  return rows;
+}
+
+function userFor(domain: Awaited<ReturnType<typeof loadDomain>>, userId: number, ctx: Ctx) {
+  const users = (domain.users ??= []);
+  let user = users.find((item) => item.id === userId);
+  if (!user) {
+    user = { id: userId, username: ctx.from?.username, displayName: ctx.from?.first_name ?? "Участник", banned: false, joinedAt: now() };
+    users.push(user);
+  }
+  return user;
+}
+
 function profileFor(domain: Awaited<ReturnType<typeof loadDomain>>, userId: number, name = "Участник"): UserProfile {
   const found = domain.userProfiles?.find((profile) => profile.userId === userId);
   if (found) return found;
@@ -34,6 +59,9 @@ async function showProfile(ctx: Ctx, targetId: number): Promise<void> {
   let text = "";
   let profile: UserProfile;
   let reviews: UserReview[] = [];
+  let own = false;
+  let phone = "";
+  let avatar: string | undefined;
   await changeDomain(ctx, (domain) => {
     profile = profileFor(domain, targetId, targetId === ctx.from?.id ? (ctx.from.first_name ?? "Участник") : "Участник");
     reviews = (domain.userReviews ?? []).filter((review) => review.targetUserId === targetId && review.status === "approved").sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
@@ -42,16 +70,18 @@ async function showProfile(ctx: Ctx, targetId: number): Promise<void> {
       `${profile.bio ? `\n${profile.bio}\n` : ""}` +
       `Рейтинг: ${profile.totalReviews ? `${profile.avgRating.toFixed(1)} / 5 ${stars(Math.round(profile.avgRating))}` : "пока нет оценок"} (${profile.totalReviews} отзывов)`;
     if (reviews.length) text += `\n\nПоследние отзывы:\n\n${reviews.map(reviewLine).join("\n\n")}`;
+    own = targetId === (ctx.from?.id ?? 0);
+    const user = domain.users?.find((item) => item.id === targetId);
+    phone = own ? (user?.phone ?? "") : "";
+    avatar = profile.avatarThumbnailFileId ?? profile.avatarFileId;
+    if (own && phone) text += `\nТелефон: ${phone}`;
   });
-  const rows: InlineButton[][] = [[inlineButton("Оставить отзыв", `profile:review:start:${targetId}`)]];
+  const targetUser = (await loadDomain(ctx)).users?.find((user) => user.id === targetId);
+  const hasPhone = Boolean(targetUser?.phone);
+  const rows = profileKeyboard(targetId, own, hasPhone, Boolean(avatar));
   for (const review of reviews) rows.push([inlineButton("Пожаловаться на отзыв", `review:flag:${review.id}`)]);
-  if (targetId !== (ctx.from?.id ?? 0)) rows.push([urlButton("Написать в Telegram", `tg://user?id=${targetId}`)]);
-  if ((await loadDomain(ctx)).users?.some((user) => user.id === targetId && user.phone)) rows.push([inlineButton("Показать телефон", `profile:phone:${targetId}`)]);
-  rows.push([inlineButton("⬅️ В меню", "menu:main")]);
   await ctx.reply(text, { reply_markup: inlineKeyboard(rows) });
-  const domain = await loadDomain(ctx);
-  const found = domain.userProfiles?.find((item) => item.userId === targetId);
-  if (found?.profileVideoFileId) await ctx.api.sendVideo(ctx.chat?.id ?? targetId, found.profileVideoFileId);
+  if (avatar) await ctx.api.sendPhoto(ctx.chat?.id ?? targetId, avatar, { caption: own ? "Ваш круглый аватар" : "Аватар участника" });
 }
 
 composer.command("profile", async (ctx) => {
@@ -65,6 +95,7 @@ composer.command("profile", async (ctx) => {
 });
 
 composer.callbackQuery("profile:me", async (ctx) => { await ctx.answerCallbackQuery(); await showProfile(ctx, ctx.from?.id ?? 0); });
+composer.callbackQuery("profile:settings", async (ctx) => { await ctx.answerCallbackQuery(); await showProfile(ctx, ctx.from?.id ?? 0); });
 composer.callbackQuery(/^profile:open:(\d+)$/, async (ctx) => { await ctx.answerCallbackQuery(); await showProfile(ctx, Number(ctx.match[1])); });
 composer.callbackQuery(/^profile:phone:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
@@ -77,6 +108,104 @@ composer.callbackQuery(/^profile:phone:reveal:(\d+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   const user = (await loadDomain(ctx)).users?.find((item) => item.id === Number(ctx.match[1]));
   await ctx.reply(user?.phone ? `Номер участника: ${user.phone}` : "Участник не оставил номер для связи.");
+});
+
+composer.callbackQuery("profile:phone:edit", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  ctx.session.step = "profile-phone";
+  await ctx.reply("Напишите номер телефона. Он останется скрытым, пока другой участник не подтвердит просмотр.", { reply_markup: force("Например: +7 900 000-00-00") });
+});
+
+composer.on("message:text", async (ctx, next) => {
+  if (ctx.session.step !== "profile-phone") return next();
+  const value = ctx.message.text.trim();
+  if (!/[+()\d][\d ()-]{5,}/.test(value) || value.replace(/\D/g, "").length < 7) {
+    await ctx.reply("Похоже, номер слишком короткий. Проверьте его и отправьте ещё раз.", { reply_markup: force("Например: +7 900 000-00-00") });
+    return;
+  }
+  const userId = ctx.from?.id ?? 0;
+  await changeDomain(ctx, (domain) => {
+    const user = userFor(domain, userId, ctx);
+    user.phone = value;
+    user.phoneVerified = false;
+    const profile = profileFor(domain, userId, ctx.from?.first_name ?? "Участник");
+    profile.updatedAt = now();
+  });
+  ctx.session.step = undefined;
+  await ctx.reply("Телефон сохранён. Другие участники увидят его только после подтверждения.", { reply_markup: inlineKeyboard([[inlineButton("Открыть профиль", "profile:me")]]) });
+});
+
+composer.callbackQuery("profile:photo:start", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  ctx.session.step = "profile-photo";
+  await ctx.reply("Пришлите фото — я сохраню небольшой центрированный аватар и покажу его в профиле.", { reply_markup: inlineKeyboard([[inlineButton("Отмена", "profile:photo:cancel")]]) });
+});
+
+composer.callbackQuery("profile:photo:cancel", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  ctx.session.step = undefined;
+  await ctx.editMessageText("Изменение фото отменено.", { reply_markup: inlineKeyboard([[inlineButton("Открыть профиль", "profile:me")]]) });
+});
+
+composer.on("message:photo", async (ctx, next) => {
+  if (ctx.session.step !== "profile-photo") return next();
+  const photos = ctx.message.photo;
+  const source = photos[photos.length - 1];
+  const thumbnail = photos[0];
+  const userId = ctx.from?.id ?? 0;
+  await changeDomain(ctx, (domain) => {
+    const profile = profileFor(domain, userId, ctx.from?.first_name ?? "Участник");
+    profile.avatarFileId = source.file_id;
+    profile.avatarThumbnailFileId = thumbnail.file_id;
+    profile.avatarCrop = "centered-circle";
+    profile.updatedAt = now();
+    const user = userFor(domain, userId, ctx);
+    user.avatarFileId = source.file_id;
+  });
+  ctx.session.step = undefined;
+  await ctx.api.sendPhoto(ctx.chat?.id ?? userId, source.file_id, { caption: "Ваш круглый аватар готов." });
+  await ctx.reply("Фото профиля обновлено.", { reply_markup: inlineKeyboard([[inlineButton("Открыть профиль", "profile:me")]]) });
+});
+
+composer.callbackQuery("profile:delete", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.reply("Удаление профиля уберёт телефон, фото, рейтинг и отзывы. Ваши объявления останутся, но будут показаны как «Удалённый пользователь» без контактов.", { reply_markup: inlineKeyboard([[inlineButton("Продолжить удаление", "profile:delete:warning")], [inlineButton("Отмена", "profile:me")]]) });
+});
+
+composer.callbackQuery("profile:delete:warning", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.editMessageText("Профиль будет удалён без возможности восстановления. Объявления сохранятся обезличенными. Подтвердить?", { reply_markup: inlineKeyboard([[inlineButton("Подтвердить", "profile:delete:confirm"), inlineButton("Отмена", "profile:me")]]) });
+});
+
+composer.callbackQuery("profile:delete:confirm", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const userId = ctx.from?.id ?? 0;
+  const deletedAt = now();
+  await changeDomain(ctx, (domain) => {
+    for (const listing of domain.listings) {
+      if (listing.owner === userId) {
+        listing.owner = 0;
+        listing.ownerDeleted = true;
+        listing.authorName = "Удалённый пользователь";
+        listing.phone = undefined;
+        listing.contact = "telegram";
+        listing.updatedAt = deletedAt;
+        domain.history.push({ listingId: listing.id, action: "profile_deleted", by: userId, at: deletedAt });
+      }
+    }
+    domain.userProfiles = (domain.userProfiles ?? []).filter((profile) => profile.userId !== userId);
+    domain.userReviews = (domain.userReviews ?? []).filter((review) => review.reviewerId !== userId && review.targetUserId !== userId);
+    domain.users = (domain.users ?? []).filter((user) => user.id !== userId);
+    domain.saved = domain.saved.filter((saved) => saved.user !== userId);
+  });
+  const notice = `Профиль удалён пользователем ${userId}. Время: ${new Date(deletedAt).toISOString()}`;
+  const admin = adminChatId(ctx);
+  if (admin) {
+    try { await ctx.api.sendMessage(admin, notice); } catch { await changeDomain(ctx, (domain) => queueNotification(domain, "profile-deleted", notice)); }
+  } else await changeDomain(ctx, (domain) => queueNotification(domain, "profile-deleted", notice));
+  ctx.session.step = undefined;
+  ctx.session.draft = undefined;
+  await ctx.reply("Профиль удалён. Ваши объявления обезличены, а личные данные удалены.", { reply_markup: inlineKeyboard([[inlineButton("Открыть меню", "menu:main")]]) });
 });
 
 composer.callbackQuery(/^profile:review:start:(\d+)$/, async (ctx) => {
