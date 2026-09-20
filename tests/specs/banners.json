@@ -1,11 +1,20 @@
 [
   {
-    "name": "Баннеры требуют доступа владельца",
+    "name": "Баннеры требуют доступа владельца, а меню работает без кампаний",
     "steps": [
       {
         "send": { "text": "/banners list" },
         "expect": [
           { "method": "sendMessage", "payload": { "text": "Owner access isn't set up yet." } }
+        ]
+      },
+      {
+        "send": { "text": "/start" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "👋 Добро пожаловать! Здесь можно быстро найти или разместить объявление." }
+          }
         ]
       }
     ]

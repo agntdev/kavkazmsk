@@ -1,7 +1,7 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import { CATEGORIES, changeDomain, loadDomain, nextId, now, type Banner, type BannerAction } from "../domain.js";
-import { adminChatId, inlineButton, inlineKeyboard, requireOwner } from "../toolkit/index.js";
+import { adminChatId, inlineButton, inlineKeyboard, isOwner, requireOwner } from "../toolkit/index.js";
 import type { InlineKeyboardMarkup } from "../toolkit/index.js";
 import { showSearchResults } from "./browse-start.js";
 
@@ -12,8 +12,39 @@ const force = (placeholder: string) => ({ force_reply: true as const, input_fiel
 
 async function activeBanners(ctx: Ctx): Promise<Banner[]> {
   const domain = await loadDomain(ctx);
-  if (domain.banned.includes(ctx.from?.id ?? ctx.chat?.id ?? 0)) return [];
-  return (domain.banners ?? []).filter((b) => b.active).sort((a, b) => a.order - b.order);
+  const userId = ctx.from?.id ?? ctx.chat?.id ?? 0;
+  if (domain.banned.includes(userId)) return [];
+  const at = now();
+  return (domain.banners ?? [])
+    .filter((banner) => {
+      // Older records use `active`; CMS-imported records use `published`.
+      // Accept either explicit publish flag, but never display an explicit false.
+      const published = banner.active === true || banner.published === true;
+      if (!published || !banner.imageFileId && !banner.imageUrl) return false;
+      if (banner.active === false || banner.published === false) return false;
+      if (banner.targetGroup === "owner" && !isOwner(ctx)) return false;
+      const startsAt = bannerTime(banner.startsAt);
+      const endsAt = bannerTime(banner.endsAt);
+      return (startsAt === undefined || at >= startsAt) && (endsAt === undefined || at < endsAt);
+    })
+    .sort((a, b) => a.order - b.order);
+}
+
+function bannerTime(value: number | string | undefined): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function bannerSource(banner: Banner): string | undefined {
+  const source = banner.imageFileId ?? banner.imageUrl;
+  if (!source?.trim()) return undefined;
+  return source.trim();
 }
 
 function bannerText(banner: Banner): string {
@@ -41,14 +72,24 @@ export async function sendMainScreen(ctx: Ctx, welcome: string, menu: InlineKeyb
     return;
   }
   const banner = banners[0];
+  const source = bannerSource(banner);
   const chatId = ctx.chat?.id ?? ctx.from?.id ?? 0;
+  if (!source) {
+    console.warn("[banner] active banner has no usable image source", { bannerId: banner.id });
+    await ctx.reply(welcome, { reply_markup: menu });
+    return;
+  }
   try {
-    const sent = await ctx.api.sendPhoto(chatId, banner.imageFileId, {
+    const sent = await ctx.api.sendPhoto(chatId, source, {
       caption: bannerText(banner),
       reply_markup: bannerKeyboard(banners, 0),
     });
     if (typeof sent === "object" && sent && "message_id" in sent) scheduleRotation(ctx, chatId, Number(sent.message_id), 0);
-  } catch {
+  } catch (error) {
+    // Keep the menu usable, but leave an actionable server-side signal so a
+    // missing Telegram file or inaccessible CDN URL is fixable instead of
+    // silently making every banner disappear.
+    console.warn("[banner] failed to send main-screen media", { bannerId: banner.id, error });
     await ctx.reply(bannerText(banner), { reply_markup: bannerKeyboard(banners, 0) });
   }
   await ctx.reply(welcome, { reply_markup: menu });
@@ -62,8 +103,10 @@ function scheduleRotation(ctx: Ctx, chatId: number | string, messageId: number, 
     if (banners.length < 2) return;
     const next = (index + 1) % banners.length;
     const banner = banners[next];
+    const source = bannerSource(banner);
+    if (!source) return;
     try {
-      await ctx.api.editMessageMedia(chatId, messageId, { type: "photo", media: banner.imageFileId, caption: bannerText(banner) }, { reply_markup: bannerKeyboard(banners, next) });
+      await ctx.api.editMessageMedia(chatId, messageId, { type: "photo", media: source, caption: bannerText(banner) }, { reply_markup: bannerKeyboard(banners, next) });
       scheduleRotation(ctx, chatId, messageId, next);
     } catch {
       // A deleted or expired Telegram message ends this carousel quietly.
@@ -86,8 +129,8 @@ async function listBanners(ctx: Ctx): Promise<void> {
     await ctx.reply("Баннеров пока нет. Добавьте первый командой /banners add.");
     return;
   }
-  const text = banners.sort((a, b) => a.order - b.order)
-    .map((b) => `${b.order}. ${b.id} — ${b.title || "без заголовка"} (${b.active ? "включён" : "выключен"})`)
+  const text = [...banners].sort((a, b) => a.order - b.order)
+    .map((b) => `${b.order}. ${b.id} — ${b.title || "без заголовка"} (${b.active === false || b.published === false ? "выключен" : "включён"})`)
     .join("\n");
   await ctx.reply(`Баннеры:\n${text}`);
 }
@@ -144,7 +187,7 @@ async function finishBanner(ctx: Ctx, action: BannerAction): Promise<void> {
       return;
     }
     const order = banners.length ? Math.max(...banners.map((b) => b.order)) + 1 : 1;
-    banners.push({ id: nextId("banner"), imageFileId: image, title, subtitle, action, order, active: true, createdAt: now(), updatedAt: now() });
+    banners.push({ id: nextId("banner"), imageFileId: image, title, subtitle, action, order, active: true, published: true, targetGroup: "all", createdAt: now(), updatedAt: now() });
   });
   ctx.session.step = undefined; ctx.session.draft = undefined;
   await ctx.reply(editId ? "Баннер обновлён." : "Баннер добавлен.");
@@ -237,14 +280,16 @@ composer.callbackQuery(/^banner:(prev|next):(\d+)$/, async (ctx) => {
   const old = Number(ctx.match[2]); const index = ctx.match[1] === "next" ? (old + 1) % banners.length : (old - 1 + banners.length) % banners.length;
   const banner = banners[index];
   await changeDomain(ctx, (d) => { d.bannerClicks = (d.bannerClicks ?? []).concat({ user: ctx.from?.id ?? 0, bannerId: banner.id, at: now() }).slice(-1000); });
-  try { await ctx.api.editMessageMedia(ctx.chat?.id ?? 0, ctx.callbackQuery.message?.message_id ?? 0, { type: "photo", media: banner.imageFileId, caption: bannerText(banner) }, { reply_markup: bannerKeyboard(banners, index) }); }
+  const source = bannerSource(banner);
+  if (!source) { await ctx.reply("Баннер сейчас недоступен. Попробуйте позже."); return; }
+  try { await ctx.api.editMessageMedia(ctx.chat?.id ?? 0, ctx.callbackQuery.message?.message_id ?? 0, { type: "photo", media: source, caption: bannerText(banner) }, { reply_markup: bannerKeyboard(banners, index) }); }
   catch { await ctx.reply(bannerText(banner), { reply_markup: bannerKeyboard(banners, index) }); }
 });
 
 composer.callbackQuery(/^banner:open:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
   ctx.session.draft = { ...(ctx.session.draft ?? {}), bannerPausedUntil: now() + 8000 };
-  const banner = (await loadDomain(ctx)).banners?.find((b) => b.id === ctx.match[1] && b.active);
+  const banner = (await loadDomain(ctx)).banners?.find((b) => b.id === ctx.match[1] && b.active !== false && b.published !== false);
   if (!banner) { await ctx.reply("Баннер больше недоступен."); return; }
   await changeDomain(ctx, (d) => { d.bannerClicks = (d.bannerClicks ?? []).concat({ user: ctx.from?.id ?? 0, bannerId: banner.id, at: now() }).slice(-1000); });
   if (banner.action.type === "url") { await ctx.reply("Ссылка откроется в браузере.", { reply_markup: inlineKeyboard([[inlineButton("Открыть ссылку", `banner:url:${banner.id}`)], [inlineButton("Назад", "menu:main")]]) }); return; }
@@ -256,7 +301,7 @@ composer.callbackQuery(/^banner:open:(.+)$/, async (ctx) => {
 
 composer.callbackQuery(/^banner:url:(.+)$/, async (ctx) => {
   await ctx.answerCallbackQuery();
-  const banner = (await loadDomain(ctx)).banners?.find((b) => b.id === ctx.match[1] && b.active);
+  const banner = (await loadDomain(ctx)).banners?.find((b) => b.id === ctx.match[1] && b.active !== false && b.published !== false);
   if (!banner || banner.action.type !== "url") { await ctx.reply("Ссылка больше недоступна."); return; }
   await ctx.reply("Открыть ссылку:", { reply_markup: inlineKeyboard([[{ text: "Открыть ссылку", url: banner.action.value }], [inlineButton("Назад", "menu:main")]]) });
 });
