@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Правила",
+    "steps": [
+      {
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "Show posting rules and prohibited content guidance"
+            }
+          }
+        ],
+        "send": {
+          "callback": "rules:view"
+        }
+      }
+    ]
+  }
+]
