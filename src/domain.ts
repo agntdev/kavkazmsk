@@ -8,14 +8,27 @@ export interface Listing {
   pinned: boolean; createdAt: number; updatedAt: number;
 }
 export interface Report { id: string; listingId: string; reporter: number; reason: string; comment?: string; createdAt: number; }
+export type ReviewStatus = "pending" | "approved" | "rejected";
+export interface UserProfile {
+  userId: number; displayName: string; avatarFileId?: string; neighbourhood?: string;
+  bio?: string; profileVideoFileId?: string; avgRating: number; totalReviews: number;
+  createdAt: number; updatedAt: number;
+}
+export interface UserReview {
+  id: string; reviewerId: number; targetUserId: number; rating: number; text?: string;
+  videoFileId?: string; status: ReviewStatus; flaggedCount: number; createdAt: number; updatedAt: number;
+}
 export interface Domain {
   listings: Listing[];
   reports: Report[];
   history: Array<{ listingId: string; action: string; by: number | string; at: number; reason?: string }>;
   banned: number[];
   saved: Array<{ user: number; listing: string }>;
-  users?: Array<{ id: number; username?: string; displayName?: string; phone?: string; banned: boolean; joinedAt: number; firstListingSubmittedAt?: number }>;
+  users?: Array<{ id: number; username?: string; displayName?: string; phone?: string; phoneVerified?: boolean; banned: boolean; joinedAt: number; firstListingSubmittedAt?: number }>;
   notificationQueue?: Array<{ kind: string; text: string; listingId?: string; createdAt: number }>;
+  userProfiles?: UserProfile[];
+  userReviews?: UserReview[];
+  reviewAutoApprove?: boolean;
 }
 
 export const CATEGORIES = ["Товары", "Услуги", "Работа", "Жильё", "Авто", "События", "Сообщество", "Потеряно и найдено", "Другое"];
@@ -40,6 +53,9 @@ function normalize(value: Domain | undefined): Domain {
     saved: Array.isArray(d.saved) ? d.saved : [],
     users: Array.isArray(d.users) ? d.users : [],
     notificationQueue: Array.isArray(d.notificationQueue) ? d.notificationQueue : [],
+    userProfiles: Array.isArray(d.userProfiles) ? d.userProfiles : [],
+    userReviews: Array.isArray(d.userReviews) ? d.userReviews : [],
+    reviewAutoApprove: d.reviewAutoApprove === true,
   };
 }
 

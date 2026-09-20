@@ -1,0 +1,59 @@
+[
+  {
+    "name": "Профиль участника",
+    "steps": [
+      {
+        "send": { "callback": "profile:open:2" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Профиль Участник\n\nРейтинг: пока нет оценок (0 отзывов)" } }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Отзыв со звёздной оценкой",
+    "steps": [
+      {
+        "send": { "callback": "profile:review:start:2" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Как оцените этого участника?" } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:review:rating:5" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Напишите пару добрых слов или нажмите «Без текста»." } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:review:no-text" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Добавьте короткое видео или пропустите этот шаг. Максимум 30 секунд и 10 МБ." } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:review:no-video" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Проверьте отзыв перед отправкой." } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:review:confirm" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Спасибо! Отзыв отправлен на проверку. Мы сообщим, когда он появится в профиле." } }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/profile opens my profile",
+    "steps": [
+      {
+        "send": { "text": "/profile" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Профиль Test\n\nРейтинг: пока нет оценок (0 отзывов)" } }
+        ]
+      }
+    ]
+  }
+]
