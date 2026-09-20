@@ -36,6 +36,7 @@ export interface Domain {
   neuralEnabled?: boolean;
   neuralRequests?: Array<{ user: number; at: number }>;
   neuralLogs?: Array<{ user: number; query: string; image: boolean; listingIds: string[]; at: number }>;
+  browseEvents?: Array<{ user: number; event: "category" | "all_categories"; value?: string; at: number }>;
 }
 
 export const CATEGORIES = ["Товары", "Услуги", "Работа", "Жильё", "Авто", "События", "Сообщество", "Потеряно и найдено", "Другое"];
@@ -66,6 +67,7 @@ function normalize(value: Domain | undefined): Domain {
     neuralEnabled: d.neuralEnabled !== false,
     neuralRequests: Array.isArray(d.neuralRequests) ? d.neuralRequests : [],
     neuralLogs: Array.isArray(d.neuralLogs) ? d.neuralLogs : [],
+    browseEvents: Array.isArray(d.browseEvents) ? d.browseEvents : [],
   };
 }
 
