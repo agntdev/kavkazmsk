@@ -7,13 +7,11 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Пока нет подходящих объявлений — загляните позже."
+              "text": "Что вы ищете?"
             }
           }
         ],
-        "send": {
-          "callback": "browse:start"
-        }
+        "send": { "callback": "browse:start" }
       }
     ]
   },
