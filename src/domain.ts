@@ -3,7 +3,7 @@ import type { Ctx } from "./bot.js";
 export type Status = "published" | "pending" | "removed" | "sold";
 export interface Listing {
   id: string; owner: number; title: string; description: string; photos: string[];
-  category: string; price?: string; location: string;
+  category: string; tags?: string[]; price?: string; location: string;
   contact: "telegram" | "phone"; phone?: string; status: Status;
   pinned: boolean; createdAt: number; updatedAt: number;
   authorName?: string; ownerDeleted?: boolean;
@@ -37,6 +37,7 @@ export interface Domain {
   neuralRequests?: Array<{ user: number; at: number }>;
   neuralLogs?: Array<{ user: number; query: string; image: boolean; listingIds: string[]; at: number }>;
   browseEvents?: Array<{ user: number; event: "category" | "all_categories"; value?: string; at: number }>;
+  searchLogs?: Array<{ user: number; query: string; resultCount: number; at: number }>;
 }
 
 export const CATEGORIES = ["Товары", "Услуги", "Работа", "Жильё", "Авто", "События", "Сообщество", "Потеряно и найдено", "Другое"];
@@ -68,6 +69,7 @@ function normalize(value: Domain | undefined): Domain {
     neuralRequests: Array.isArray(d.neuralRequests) ? d.neuralRequests : [],
     neuralLogs: Array.isArray(d.neuralLogs) ? d.neuralLogs : [],
     browseEvents: Array.isArray(d.browseEvents) ? d.browseEvents : [],
+    searchLogs: Array.isArray(d.searchLogs) ? d.searchLogs : [],
   };
 }
 

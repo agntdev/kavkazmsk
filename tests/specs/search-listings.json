@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Поиск объявлений без совпадений предлагает категории",
+    "steps": [
+      {
+        "send": { "callback": "browse:start" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Что вы ищете?" } }
+        ]
+      },
+      {
+        "send": { "text": "керамический самокат" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Ничего не найдено. Попробуйте изменить запрос или выбрать категорию." }
+          }
+        ]
+      },
+      {
+        "send": { "callback": "browse:categories" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Выберите категорию." } }
+        ]
+      }
+    ]
+  }
+]
