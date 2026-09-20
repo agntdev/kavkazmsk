@@ -43,7 +43,7 @@ function searchCard(listing: Listing): string {
   return `${listing.title}\nЦена: ${listing.price || "договорная"}\nРайон: ${listing.location}\n${snippet(listing)}`;
 }
 
-async function showSearchResults(ctx: Ctx, query: string, page = 0, log = false): Promise<void> {
+export async function showSearchResults(ctx: Ctx, query: string, page = 0, log = false): Promise<void> {
   const domain = await loadDomain(ctx);
   const results = domain.listings
     .filter((listing) => listing.status === "published" && matchesSearch(listing, query))

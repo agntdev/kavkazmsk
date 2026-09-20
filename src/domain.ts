@@ -11,6 +11,23 @@ export interface Listing {
   embedding?: number[];
 }
 export interface Report { id: string; listingId: string; reporter: number; reason: string; comment?: string; createdAt: number; }
+export type BannerAction =
+  | { type: "category"; value: string }
+  | { type: "listing"; value: string }
+  | { type: "url"; value: string }
+  | { type: "search"; value: string }
+  | { type: "none" };
+export interface Banner {
+  id: string;
+  imageFileId: string;
+  title?: string;
+  subtitle?: string;
+  action: BannerAction;
+  order: number;
+  active: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
 export type ReviewStatus = "pending" | "approved" | "rejected";
 export interface UserProfile {
   userId: number; displayName: string; avatarFileId?: string; neighbourhood?: string;
@@ -38,6 +55,8 @@ export interface Domain {
   neuralLogs?: Array<{ user: number; query: string; image: boolean; listingIds: string[]; at: number }>;
   browseEvents?: Array<{ user: number; event: "category" | "all_categories"; value?: string; at: number }>;
   searchLogs?: Array<{ user: number; query: string; resultCount: number; at: number }>;
+  banners?: Banner[];
+  bannerClicks?: Array<{ user: number; bannerId: string; at: number }>;
 }
 
 export const CATEGORIES = ["Товары", "Услуги", "Работа", "Жильё", "Авто", "События", "Сообщество", "Потеряно и найдено", "Другое"];
@@ -70,6 +89,8 @@ function normalize(value: Domain | undefined): Domain {
     neuralLogs: Array.isArray(d.neuralLogs) ? d.neuralLogs : [],
     browseEvents: Array.isArray(d.browseEvents) ? d.browseEvents : [],
     searchLogs: Array.isArray(d.searchLogs) ? d.searchLogs : [],
+    banners: Array.isArray(d.banners) ? d.banners : [],
+    bannerClicks: Array.isArray(d.bannerClicks) ? d.bannerClicks : [],
   };
 }
 

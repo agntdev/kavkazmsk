@@ -1,0 +1,13 @@
+[
+  {
+    "name": "Баннеры требуют доступа владельца",
+    "steps": [
+      {
+        "send": { "text": "/banners list" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Owner access isn't set up yet." } }
+        ]
+      }
+    ]
+  }
+]
