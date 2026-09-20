@@ -16,5 +16,28 @@
         }
       }
     ]
+  },
+  {
+    "name": "Все категории показывает общий каталог",
+    "steps": [
+      {
+        "send": { "callback": "browse:categories" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Выберите категорию." }
+          }
+        ]
+      },
+      {
+        "send": { "callback": "browse:all" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Пока нет подходящих объявлений — загляните позже." }
+          }
+        ]
+      }
+    ]
   }
 ]
