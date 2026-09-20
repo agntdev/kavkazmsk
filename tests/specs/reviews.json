@@ -1,0 +1,16 @@
+[
+  {
+    "name": "/reviews requires owner access",
+    "steps": [
+      {
+        "send": { "text": "/reviews" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Owner access isn't set up yet." }
+          }
+        ]
+      }
+    ]
+  }
+]
