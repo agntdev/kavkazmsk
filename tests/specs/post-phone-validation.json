@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Неверный телефон получает понятную подсказку",
+    "steps": [
+      { "send": { "callback": "post:start" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Начнём. Напишите короткий заголовок (до 120 символов)." } }] },
+      { "send": { "text": "Продам велосипед" }, "expect": [] },
+      { "send": { "callback": "post:cat:0" }, "expect": [] },
+      { "send": { "text": "Хороший велосипед в Москве" }, "expect": [] },
+      { "send": { "text": "10000" }, "expect": [] },
+      { "send": { "callback": "post:photos:done" }, "expect": [] },
+      { "send": { "callback": "post:loc:0" }, "expect": [] },
+      { "send": { "callback": "post:contact:phone" }, "expect": [] },
+      { "send": { "text": "123" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Похоже, номер слишком короткий. Проверьте его и отправьте ещё раз." } }] }
+    ]
+  }
+]

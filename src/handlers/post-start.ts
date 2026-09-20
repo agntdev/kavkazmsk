@@ -1,7 +1,7 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import { adminChatId, registerMainMenuItem, inlineButton, inlineKeyboard } from "../toolkit/index.js";
-import { CATEGORIES, LOCATIONS, changeDomain, loadDomain, nextId, now, type Listing } from "../domain.js";
+import { CATEGORIES, LOCATIONS, changeDomain, loadDomain, nextId, now, queueNotification, type Listing } from "../domain.js";
 
 registerMainMenuItem({ label: "➕ Подать объявление", data: "post:start", order: 10 });
 const composer = new Composer<Ctx>();
@@ -35,6 +35,7 @@ composer.on("message:text", async (ctx, next) => {
   }
   if (step === "location-other") { d.location = text.slice(0, 100); ctx.session.step = "contact"; await ctx.reply("Как с вами связаться?", { reply_markup: inlineKeyboard([[inlineButton("В Telegram", "post:contact:telegram")], [inlineButton("Показать телефон", "post:contact:phone")], ...cancel]) }); return; }
   if (step === "phone") {
+    if (!/[+()\d][\d ()-]{5,}/.test(text)) { await ctx.reply("Похоже, номер слишком короткий. Проверьте его и отправьте ещё раз.", { reply_markup: force("Например: +7 900 000-00-00") }); return; }
     d.phone = text; d.contact = "phone"; ctx.session.step = "confirm"; await ctx.reply(preview(d, "проверяется"), { reply_markup: inlineKeyboard([[inlineButton("Опубликовать", "post:publish"), inlineButton("Изменить", "post:edit")], [inlineButton("Отмена", "post:cancel")]]) }); return;
   }
   return next();
@@ -51,8 +52,35 @@ composer.callbackQuery("post:publish", async (ctx) => {
   await ctx.answerCallbackQuery(); const d = ctx.session.draft ?? {}; const user = ctx.from?.id ?? ctx.chat?.id ?? 0; const existing = await loadDomain(ctx);
   if (existing.banned.includes(user)) { await ctx.reply("Ваш доступ к публикации объявлений ограничен."); return; }
   if (!d.title || !d.description || !d.category || !d.location) { await ctx.reply("Черновик заполнен не полностью. Начните объявление заново.", { reply_markup: inlineKeyboard([[inlineButton("Подать объявление", "post:start")]]) }); return; }
+  const editingId = typeof d.editingId === "string" ? d.editingId : undefined;
   const first = !existing.listings.some((x) => x.owner === user); const listing: Listing = { id: nextId("ad"), owner: user, title: String(d.title), description: String(d.description), photos: (d.photos as string[] | undefined) ?? [], category: String(d.category), price: d.price ? String(d.price) : undefined, location: String(d.location), contact: d.contact === "phone" ? "phone" : "telegram", phone: d.phone ? String(d.phone) : undefined, status: first ? "pending" : "published", pinned: false, createdAt: now(), updatedAt: now() };
-  await changeDomain(ctx, (domain) => { domain.listings.push(listing); domain.history.push({ listingId: listing.id, action: "created", by: user, at: now() }); }); ctx.session.step = undefined; ctx.session.draft = undefined;
-  if (listing.status === "pending") { const admin = adminChatId(ctx as unknown as { env?: Record<string, unknown> }); if (admin) { try { await ctx.api.sendMessage(admin, `Новое объявление на проверку:\n\n${listing.title}\n${listing.location}`, { reply_markup: inlineKeyboard([[inlineButton("Одобрить", `admin:approve:${listing.id}`), inlineButton("Отклонить", `admin:reject:${listing.id}`)], [inlineButton("Удалить", `admin:remove:${listing.id}`), inlineButton("Заблокировать автора", `admin:ban:${listing.id}`)]]) }); } catch { /* a failed notification must not lose the listing */ } } await ctx.reply("Объявление отправлено на проверку. Мы сообщим, когда оно появится в каталоге."); } else await ctx.reply("Готово — объявление опубликовано!", { reply_markup: inlineKeyboard([[inlineButton("Открыть каталог", "browse:start")], [inlineButton("Мои объявления", "myads:start")]]) });
+  let updated = false;
+  await changeDomain(ctx, (domain) => {
+    if (editingId) {
+      const old = domain.listings.find((x) => x.id === editingId && x.owner === user);
+      if (old && old.status !== "removed") {
+        Object.assign(old, { title: listing.title, description: listing.description, photos: listing.photos, category: listing.category, price: listing.price, location: listing.location, contact: listing.contact, phone: listing.phone, updatedAt: now() });
+        domain.history.push({ listingId: old.id, action: "edited", by: user, at: now() });
+        updated = true;
+      }
+    }
+    if (updated) return;
+    domain.listings.push(listing);
+    domain.history.push({ listingId: listing.id, action: "created", by: user, at: now() });
+    const users = (domain.users ??= []);
+    let profile = users.find((x) => x.id === user);
+    if (!profile) { profile = { id: user, displayName: ctx.from?.first_name, username: ctx.from?.username, banned: false, joinedAt: now() }; users.push(profile); }
+    profile.firstListingSubmittedAt ??= now();
+  }); ctx.session.step = undefined; ctx.session.draft = undefined;
+  if (updated) { await ctx.reply("Объявление обновлено.", { reply_markup: inlineKeyboard([[inlineButton("Мои объявления", "myads:start")]]) }); return; }
+  if (listing.status === "pending") {
+    const admin = adminChatId(ctx);
+    const notification = `Новое объявление на проверку:\n\n${listing.title}\n${listing.location}`;
+    const markup = { reply_markup: inlineKeyboard([[inlineButton("Одобрить", `admin:approve:${listing.id}`), inlineButton("Отклонить", `admin:reject:${listing.id}`)], [inlineButton("Удалить", `admin:remove:${listing.id}`), inlineButton("Заблокировать автора", `admin:ban:${listing.id}`)]]) };
+    let delivered = false;
+    if (admin) { try { await ctx.api.sendMessage(admin, notification, markup); delivered = true; } catch { /* retain it below */ } }
+    if (!delivered) await changeDomain(ctx, (domain) => queueNotification(domain, "pending", notification, listing.id));
+    await ctx.reply("Объявление отправлено на проверку. Мы сообщим, когда оно появится в каталоге.");
+  } else await ctx.reply("Готово — объявление опубликовано!", { reply_markup: inlineKeyboard([[inlineButton("Открыть каталог", "browse:start")], [inlineButton("Мои объявления", "myads:start")]]) });
 });
 export default composer;
