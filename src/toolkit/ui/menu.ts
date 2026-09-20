@@ -51,9 +51,9 @@ export function mainMenuItems(): MainMenuItem[] {
  * row, with a Help button (`menu:help`) always appended last. Render this from
  * the `/start` handler and from a "back to menu" action.
  */
-export function mainMenuKeyboard(columns = 2): InlineKeyboardMarkup {
+export function mainMenuKeyboard(columns = 2, hiddenData?: ReadonlySet<string>): InlineKeyboardMarkup {
   const cols = Math.max(1, Math.floor(columns));
-  const items = mainMenuItems();
+  const items = mainMenuItems().filter((item) => !hiddenData?.has(item.data));
   const rows = [];
   for (let i = 0; i < items.length; i += cols) {
     rows.push(items.slice(i, i + cols).map((it) => inlineButton(it.label, it.data)));
