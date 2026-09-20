@@ -55,5 +55,57 @@
         ]
       }
     ]
+  },
+  {
+    "name": "Владелец профиля добавляет телефон и видит его только у себя",
+    "steps": [
+      {
+        "send": { "callback": "profile:me" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Профиль Test\n\nРейтинг: пока нет оценок (0 отзывов)" } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:phone:edit" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Напишите номер телефона. Он останется скрытым, пока другой участник не подтвердит просмотр." } }
+        ]
+      },
+      {
+        "send": { "text": "+7 900 000-00-00" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Телефон сохранён. Другие участники увидят его только после подтверждения." } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:me" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Профиль Test\n\nРейтинг: пока нет оценок (0 отзывов)\nТелефон: +7 900 000-00-00" } }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Удаление профиля требует двух подтверждений",
+    "steps": [
+      {
+        "send": { "callback": "profile:delete" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Удаление профиля уберёт телефон, фото, рейтинг и отзывы. Ваши объявления останутся, но будут показаны как «Удалённый пользователь» без контактов." } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:delete:warning" },
+        "expect": [
+          { "method": "editMessageText", "payload": { "text": "Профиль будет удалён без возможности восстановления. Объявления сохранятся обезличенными. Подтвердить?" } }
+        ]
+      },
+      {
+        "send": { "callback": "profile:delete:confirm" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Профиль удалён. Ваши объявления обезличены, а личные данные удалены." } }
+        ]
+      }
+    ]
   }
 ]

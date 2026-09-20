@@ -6,11 +6,13 @@ export interface Listing {
   category: string; price?: string; location: string;
   contact: "telegram" | "phone"; phone?: string; status: Status;
   pinned: boolean; createdAt: number; updatedAt: number;
+  authorName?: string; ownerDeleted?: boolean;
 }
 export interface Report { id: string; listingId: string; reporter: number; reason: string; comment?: string; createdAt: number; }
 export type ReviewStatus = "pending" | "approved" | "rejected";
 export interface UserProfile {
   userId: number; displayName: string; avatarFileId?: string; neighbourhood?: string;
+  avatarThumbnailFileId?: string; avatarCrop?: "centered-circle";
   bio?: string; profileVideoFileId?: string; avgRating: number; totalReviews: number;
   createdAt: number; updatedAt: number;
 }
@@ -24,7 +26,7 @@ export interface Domain {
   history: Array<{ listingId: string; action: string; by: number | string; at: number; reason?: string }>;
   banned: number[];
   saved: Array<{ user: number; listing: string }>;
-  users?: Array<{ id: number; username?: string; displayName?: string; phone?: string; phoneVerified?: boolean; banned: boolean; joinedAt: number; firstListingSubmittedAt?: number }>;
+  users?: Array<{ id: number; username?: string; displayName?: string; phone?: string; phoneVerified?: boolean; avatarFileId?: string; banned: boolean; joinedAt: number; firstListingSubmittedAt?: number }>;
   notificationQueue?: Array<{ kind: string; text: string; listingId?: string; createdAt: number }>;
   userProfiles?: UserProfile[];
   userReviews?: UserReview[];
