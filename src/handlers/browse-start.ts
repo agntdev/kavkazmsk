@@ -124,7 +124,7 @@ composer.callbackQuery("browse:start", async (ctx) => {
 composer.callbackQuery("browse:categories", async (ctx) => {
   await ctx.answerCallbackQuery();
   const rows: InlineButton[][] = [
-    [inlineButton("Все категории", "browse:all")],
+    [inlineButton("Показать все объявления", "browse:all")],
     ...CATEGORIES.map((x, i) => [inlineButton(x, `browse:cat:${i}`)]),
     [inlineButton("⬅️ Назад", "browse:start")],
   ];
