@@ -7,6 +7,8 @@ export interface Listing {
   contact: "telegram" | "phone"; phone?: string; status: Status;
   pinned: boolean; createdAt: number; updatedAt: number;
   authorName?: string; ownerDeleted?: boolean;
+  /** Optional vector produced by the configured embedding service. */
+  embedding?: number[];
 }
 export interface Report { id: string; listingId: string; reporter: number; reason: string; comment?: string; createdAt: number; }
 export type ReviewStatus = "pending" | "approved" | "rejected";
@@ -31,6 +33,9 @@ export interface Domain {
   userProfiles?: UserProfile[];
   userReviews?: UserReview[];
   reviewAutoApprove?: boolean;
+  neuralEnabled?: boolean;
+  neuralRequests?: Array<{ user: number; at: number }>;
+  neuralLogs?: Array<{ user: number; query: string; image: boolean; listingIds: string[]; at: number }>;
 }
 
 export const CATEGORIES = ["Товары", "Услуги", "Работа", "Жильё", "Авто", "События", "Сообщество", "Потеряно и найдено", "Другое"];
@@ -58,6 +63,9 @@ function normalize(value: Domain | undefined): Domain {
     userProfiles: Array.isArray(d.userProfiles) ? d.userProfiles : [],
     userReviews: Array.isArray(d.userReviews) ? d.userReviews : [],
     reviewAutoApprove: d.reviewAutoApprove === true,
+    neuralEnabled: d.neuralEnabled !== false,
+    neuralRequests: Array.isArray(d.neuralRequests) ? d.neuralRequests : [],
+    neuralLogs: Array.isArray(d.neuralLogs) ? d.neuralLogs : [],
   };
 }
 

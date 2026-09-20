@@ -1,0 +1,35 @@
+[
+  {
+    "name": "Нейросеть открывает текстовый поиск",
+    "steps": [
+      {
+        "send": { "callback": "neural:open" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Опишите, что ищете (текст или фото)" } }
+        ]
+      },
+      {
+        "send": { "callback": "neural:text" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Опишите, что ищете (текст или фото)" } }
+        ]
+      },
+      {
+        "send": { "text": "Ищу мастера по ремонту" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Текст принят. Можно добавить фото или сразу начать поиск." }
+          }
+        ]
+      },
+      {
+        "send": { "callback": "neural:submit" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Ищем…" } },
+          { "method": "editMessageText", "payload": { "text": "Поиск через нейросеть сейчас недоступен, попробуйте позже\n\nРезультаты обычного поиска\n\nНичего подходящего не нашлось — попробуйте описать запрос иначе." } }
+        ]
+      }
+    ]
+  }
+]
