@@ -19,12 +19,22 @@ export type BannerAction =
   | { type: "none" };
 export interface Banner {
   id: string;
-  imageFileId: string;
+  /** Telegram file_id for uploaded media. */
+  imageFileId?: string;
+  /** HTTPS CDN URL for media managed outside Telegram. */
+  imageUrl?: string;
   title?: string;
   subtitle?: string;
   action: BannerAction;
   order: number;
-  active: boolean;
+  active?: boolean;
+  /** Compatibility with CMS records that call the publish flag `published`. */
+  published?: boolean;
+  /** Optional inclusive start and exclusive end, in epoch milliseconds or ISO text. */
+  startsAt?: number | string;
+  endsAt?: number | string;
+  /** `all` is the default; `owner` is useful for private owner campaigns. */
+  targetGroup?: "all" | "users" | "owner";
   createdAt: number;
   updatedAt: number;
 }
