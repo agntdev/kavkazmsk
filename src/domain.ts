@@ -12,7 +12,14 @@ export interface Domain { listings: Listing[]; reports: Report[]; history: Array
 
 export const CATEGORIES = ["Товары", "Услуги", "Работа", "Жильё", "Авто", "События", "Сообщество", "Потеряно и найдено", "Другое"];
 export const LOCATIONS = ["Вся Москва", "Центр", "Север", "Юг", "Восток", "Запад", "Северо-Восток", "Юго-Восток"];
-export const now = (): number => Date.now();
+// One clock seam keeps expiry/cutoff/status decisions deterministic. Production
+// uses wall time; tests and replay tools can replace it without changing a
+// handler's logic.
+let currentClock: () => number = () => Date.now();
+export const now = (): number => currentClock();
+export function setClock(clock: (() => number) | undefined): void {
+  currentClock = clock ?? (() => Date.now());
+}
 const empty = (): Domain => ({ listings: [], reports: [], history: [], banned: [], saved: [] });
 
 type RuntimeCtx = Ctx & { env?: { CHAT_DO?: { idFromName(name: string): unknown; get(id: unknown): { fetch(input: string, init?: RequestInit): Promise<Response> } } } };
